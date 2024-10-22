@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  notification-app
+
+  SAM Template for a notification app with DynamoDB and SNS integration
+
+Globals:
+  Function:
+    Timeout: 30
+
+Resources:
+  # DynamoDB Table for storing announcements
+  AnnouncementsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AnnouncementsTable
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # SNS Topic for sending notifications
+  AnnouncementsSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: AnnouncementsTopic
+
+  # Lambda function for handling API requests
+  AnnouncementsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: announcements.lambdaHandler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref AnnouncementsTable
+          SNS_TOPIC_ARN: !Ref AnnouncementsSNSTopic
+      Events:
+        AnnouncementsApi:
+          Type: Api
+          Properties:
+            Path: /announcements
+            Method: any  # Supports GET, POST, etc.
+      Policies:
+        - AWSLambdaDynamoDBExecutionRole
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            Effect: Allow
+            Action:
+              - "sns:Publish"
+            Resource: !Ref AnnouncementsSNSTopic
+
+Outputs:
+  # Output for the API Gateway endpoint
+  AnnouncementsApiUrl:
+    Description: "API Gateway endpoint URL for Announcements function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/announcements/"
+  
+  # Output for the Lambda Function ARN
+  AnnouncementsFunctionArn:
+    Description: "Announcements Lambda Function ARN"
+    Value: !GetAtt AnnouncementsFunction.Arn
+
+  # Output for the IAM Role of the Lambda function
+  AnnouncementsFunctionIamRole:
+    Description: "IAM Role created for Announcements function"
+    Value: !GetAtt AnnouncementsFunctionRole.Arn
