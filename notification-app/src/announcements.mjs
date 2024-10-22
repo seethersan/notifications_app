@@ -1,16 +1,18 @@
-import AWS from 'aws-sdk';
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import jwt from 'jsonwebtoken';
 
-const dynamoDb = new AWS.DynamoDB.DocumentClient();
-const sns = new AWS.SNS();
-const secretsManager = new AWS.SecretsManager();
+const dynamoDbClient = new DynamoDBClient({});
+const snsClient = new SNSClient({});
+const secretsManagerClient = new SecretsManagerClient({});
 
-// Function to retrieve the JWT secret from Secrets Manager
 async function getSecretValue(secretName) {
-    const params = { SecretId: secretName };
+    const command = new GetSecretValueCommand({ SecretId: secretName });
     try {
-        const data = await secretsManager.getSecretValue(params).promise();
-        if ('SecretString' in data) {
+        const data = await secretsManagerClient.send(command);
+        if (data.SecretString) {
             return data.SecretString;
         }
         throw new Error('Secret not found');
@@ -21,15 +23,7 @@ async function getSecretValue(secretName) {
 }
 
 /**
- *
- * Event doc: https://docs.aws.amazon.com/apigateway/latest/dg/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
- * @param {Object} event - API Gateway Lambda Proxy Input Format
- *
- * Context doc: https://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-context.html 
- * @param {Object} context
- *
- * Return doc: https://docs.aws.amazon.com/apigateway/latest/dg/set-up-lambda-proxy-integrations.html
- * @returns {Object} object - API Gateway Lambda Proxy Output Format
+ * Main Lambda handler
  */
 export const lambdaHandler = async (event, context) => {
     const httpMethod = event.httpMethod;
@@ -41,6 +35,7 @@ export const lambdaHandler = async (event, context) => {
     try {
         JWT_SECRET_KEY = await getSecretValue(secretName);
     } catch (error) {
+        console.error("Secrets Manager Error:", error);
         return {
             statusCode: 500,
             body: JSON.stringify({
@@ -62,9 +57,10 @@ export const lambdaHandler = async (event, context) => {
     // Step 2: Validate the JWT token
     let decodedToken;
     try {
-        const token = authorizationHeader.split(' ')[1]; // Assumes 'Bearer <token>'
+        const token = authorizationHeader.split(' ')[1]; 
         decodedToken = jwt.verify(token, JWT_SECRET_KEY);
     } catch (error) {
+        console.error("JWT Token Error:", error);
         return {
             statusCode: 401,
             body: JSON.stringify({
@@ -76,25 +72,25 @@ export const lambdaHandler = async (event, context) => {
     // Now that the token is valid, proceed with the Lambda logic
     if (httpMethod === "POST") {
         try {
-            // Parse the request body
             const requestBody = JSON.parse(event.body);
             const { id, title, description, releaseDate } = requestBody;
 
-            // Store the announcement in DynamoDB
+            console.log("Inserting into DynamoDB:", requestBody);
+
             const params = {
-                TableName: TABLE_NAME,
+                TableName: process.env.TABLE_NAME,
                 Item: { id, title, description, releaseDate },
             };
-            await dynamoDb.put(params).promise();
+            await dynamoDbClient.send(new PutCommand(params));
 
-            // Send a notification via SNS
+            console.log("Publishing to SNS:", title);
+
             const snsParams = {
                 Message: `New feature released: ${title} - ${description}`,
-                TopicArn: SNS_TOPIC_ARN,
+                TopicArn: process.env.SNS_TOPIC_ARN,
             };
-            await sns.publish(snsParams).promise();
+            await snsClient.send(new PublishCommand(snsParams));
 
-            // Response
             return {
                 statusCode: 201,
                 body: JSON.stringify({
@@ -103,7 +99,7 @@ export const lambdaHandler = async (event, context) => {
                 }),
             };
         } catch (error) {
-            console.error("Error:", error);
+            console.error("POST Request Error:", error);
             return {
                 statusCode: 500,
                 body: JSON.stringify({ error: "Could not create announcement" }),
@@ -111,9 +107,8 @@ export const lambdaHandler = async (event, context) => {
         }
     } else if (httpMethod === "GET") {
         try {
-            // Retrieve announcements from DynamoDB
-            const params = { TableName: TABLE_NAME };
-            const data = await dynamoDb.scan(params).promise();
+            const params = { TableName: process.env.TABLE_NAME };
+            const data = await dynamoDbClient.send(new ScanCommand(params));
 
             return {
                 statusCode: 200,
@@ -123,7 +118,7 @@ export const lambdaHandler = async (event, context) => {
                 }),
             };
         } catch (error) {
-            console.error("Error:", error);
+            console.error("GET Request Error:", error);
             return {
                 statusCode: 500,
                 body: JSON.stringify({ error: "Could not fetch announcements" }),
@@ -131,7 +126,6 @@ export const lambdaHandler = async (event, context) => {
         }
     }
 
-    // Default response for unsupported HTTP methods
     return {
         statusCode: 405,
         body: JSON.stringify({
