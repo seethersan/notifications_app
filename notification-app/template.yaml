@@ -42,6 +42,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref AnnouncementsTable
           SNS_TOPIC_ARN: !Ref AnnouncementsSNSTopic
+          SECRET_NAME: "JWTSecretKey"
       Events:
         AnnouncementsApi:
           Type: Api
@@ -56,6 +57,11 @@ Resources:
             Action:
               - "sns:Publish"
             Resource: !Ref AnnouncementsSNSTopic
+        - Statement:
+            Effect: Allow
+            Action:
+              - "secretsmanager:GetSecretValue"
+            Resource: "*"
 
 Outputs:
   # Output for the API Gateway endpoint
