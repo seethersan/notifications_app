@@ -3,32 +3,38 @@
 import { lambdaHandler } from '../../announcements.mjs';
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { SNSClient } from '@aws-sdk/client-sns';
 import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';  // Import jwksClient for mocking JWKS
 
 var event, context;
 
 describe('Tests lambdaHandler', function () {
-    let secretsManagerStub;
     let dynamoDbStub;
     let snsStub;
+    let jwksStub;
+    let jwtVerifyStub;
 
     beforeEach(() => {
-        // Stub the SecretsManagerClient's send method
-        secretsManagerStub = sinon.stub(SecretsManagerClient.prototype, 'send');
-        
         // Stub the DynamoDBClient's send method
         dynamoDbStub = sinon.stub(DynamoDBClient.prototype, 'send');
         
         // Stub the SNSClient's send method
         snsStub = sinon.stub(SNSClient.prototype, 'send');
+        
+        // Stub the JWKS client method `getSigningKey`
+        jwksStub = sinon.stub(jwksClient({
+          jwksUri: `https://cognito-idp.${process.env.AWS_COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+        }), 'getSigningKey');
+        
+        // Stub jwt.verify for testing token validation
+        jwtVerifyStub = sinon.stub(jwt, 'verify');
 
         // Mock event and context
         event = {
             headers: {
-                Authorization: `Bearer ${jwt.sign({ userId: '12345' }, 'your-very-secure-secret')}`,
+                Authorization: `Bearer valid-token`,  // Default valid token for testing
             },
             httpMethod: 'GET',
         };
@@ -42,9 +48,16 @@ describe('Tests lambdaHandler', function () {
     });
 
     it('verifies successful response for GET with valid JWT token', async () => {
-        // Mock the SecretsManager response for JWT secret
-        secretsManagerStub.resolves({ SecretString: 'your-very-secure-secret' });
-        
+        // Mock the JWKS response for valid token
+        jwksStub.callsFake((kid, callback) => {
+            callback(null, { getPublicKey: () => 'public-key' });
+        });
+
+        // Mock the JWT verification
+        jwtVerifyStub.callsFake((token, key, options, callback) => {
+            callback(null, { sub: '12345', username: 'testuser' });
+        });
+
         // Mock the DynamoDBClient response for GET request
         dynamoDbStub.resolves({ Items: [{ id: 1, title: 'Test Announcement', description: 'This is a test' }] });
 
@@ -64,9 +77,6 @@ describe('Tests lambdaHandler', function () {
         // Remove the Authorization header to simulate missing token
         event.headers = {};
 
-        // Mock the SecretsManager response for JWT secret
-        secretsManagerStub.resolves({ SecretString: 'your-very-secure-secret' });
-
         const result = await lambdaHandler(event, context);
 
         expect(result).to.be.an('object');
@@ -82,8 +92,15 @@ describe('Tests lambdaHandler', function () {
         // Set an invalid JWT token
         event.headers.Authorization = 'Bearer invalid-token';
 
-        // Mock the SecretsManager response for JWT secret
-        secretsManagerStub.resolves({ SecretString: 'your-very-secure-secret' });
+        // Mock the JWKS response
+        jwksStub.callsFake((kid, callback) => {
+            callback(null, { getPublicKey: () => 'public-key' });
+        });
+
+        // Simulate JWT verification failure
+        jwtVerifyStub.callsFake((token, key, options, callback) => {
+            callback(new Error('Invalid token'), null);
+        });
 
         const result = await lambdaHandler(event, context);
 
@@ -97,8 +114,15 @@ describe('Tests lambdaHandler', function () {
     });
 
     it('verifies successful response for POST with valid JWT token', async () => {
-        // Mock the SecretsManager response for JWT secret
-        secretsManagerStub.resolves({ SecretString: 'your-very-secure-secret' });
+        // Mock the JWKS response for valid token
+        jwksStub.callsFake((kid, callback) => {
+            callback(null, { getPublicKey: () => 'public-key' });
+        });
+
+        // Mock the JWT verification
+        jwtVerifyStub.callsFake((token, key, options, callback) => {
+            callback(null, { sub: '12345', username: 'testuser' });
+        });
 
         // Mock the DynamoDBClient response for POST request
         dynamoDbStub.resolves({});  // Simulate successful DynamoDB insertion

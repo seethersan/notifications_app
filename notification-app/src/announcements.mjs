@@ -1,25 +1,26 @@
-import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa'; // We will use jwks-rsa to retrieve public keys
 
+// Initialize AWS clients
 const dynamoDbClient = new DynamoDBClient({});
 const snsClient = new SNSClient({});
-const secretsManagerClient = new SecretsManagerClient({});
 
-async function getSecretValue(secretName) {
-    const command = new GetSecretValueCommand({ SecretId: secretName });
-    try {
-        const data = await secretsManagerClient.send(command);
-        if (data.SecretString) {
-            return data.SecretString;
-        }
-        throw new Error('Secret not found');
-    } catch (error) {
-        console.error('Error retrieving secret', error);
-        throw error;
-    }
+// Initialize JWKS client to fetch public keys from the Cognito User Pool
+const jwks = jwksClient({
+  jwksUri: `https://cognito-idp.${process.env.AWS_COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+});
+
+/**
+ * Function to retrieve signing key from Cognito User Pool JWKS
+ */
+function getKey(header, callback) {
+  jwks.getSigningKey(header.kid, (err, key) => {
+    const signingKey = key.getPublicKey();
+    callback(null, signingKey);
+  });
 }
 
 /**
@@ -28,21 +29,6 @@ async function getSecretValue(secretName) {
 export const lambdaHandler = async (event, context) => {
     const httpMethod = event.httpMethod;
     const authorizationHeader = event.headers.Authorization;
-
-    // Retrieve the secret from Secrets Manager
-    const secretName = process.env.SECRET_NAME;
-    let JWT_SECRET_KEY;
-    try {
-        JWT_SECRET_KEY = await getSecretValue(secretName);
-    } catch (error) {
-        console.error("Secrets Manager Error:", error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                message: "Error retrieving secret",
-            }),
-        };
-    }
 
     // Step 1: Check for Authorization header
     if (!authorizationHeader) {
@@ -54,11 +40,18 @@ export const lambdaHandler = async (event, context) => {
         };
     }
 
-    // Step 2: Validate the JWT token
+    // Step 2: Validate the JWT token using Cognito JWKS
     let decodedToken;
     try {
-        const token = authorizationHeader.split(' ')[1]; 
-        decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const token = authorizationHeader.split(' ')[1]; // Extract token from header
+        decodedToken = await new Promise((resolve, reject) => {
+            jwt.verify(token, getKey, {}, (err, decoded) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(decoded);
+            });
+        });
     } catch (error) {
         console.error("JWT Token Error:", error);
         return {

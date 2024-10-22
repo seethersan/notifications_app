@@ -29,6 +29,36 @@ Resources:
     Properties:
       TopicName: AnnouncementsTopic
 
+  # Cognito User Pool for authentication
+  AnnouncementsUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: "NotificationsAppUserPool"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireUppercase: true
+          RequireSymbols: true
+      UsernameAttributes:
+        - email
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+
+  # Cognito User Pool Client for frontend authentication
+  AnnouncementsUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref AnnouncementsUserPool
+      ClientName: "NotificationsAppClient"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH  # Allow SRP auth for better security
+        - ALLOW_REFRESH_TOKEN_AUTH
+
   # Lambda function for handling API requests
   AnnouncementsFunction:
     Type: AWS::Serverless::Function
@@ -42,13 +72,15 @@ Resources:
         Variables:
           TABLE_NAME: !Ref AnnouncementsTable
           SNS_TOPIC_ARN: !Ref AnnouncementsSNSTopic
-          SECRET_NAME: "JWTSecretKey"
+          COGNITO_USER_POOL_ID: !Ref AnnouncementsUserPool
+          AWS_COGNITO_REGION: !Ref AWS::Region
       Events:
         AnnouncementsApi:
           Type: Api
           Properties:
             Path: /announcements
             Method: any  # Supports GET, POST, etc.
+            RestApiId: !Ref MyApi  # Attach to the custom API Gateway
       Policies:
         - AWSLambdaDynamoDBExecutionRole
         - AWSLambdaBasicExecutionRole
@@ -63,12 +95,24 @@ Resources:
               - "secretsmanager:GetSecretValue"
             Resource: "*"
 
+  # API Gateway with Cognito Authorizer
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors: "'*'"  # Allow CORS from any origin
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt AnnouncementsUserPool.Arn
+
 Outputs:
   # Output for the API Gateway endpoint
   AnnouncementsApiUrl:
     Description: "API Gateway endpoint URL for Announcements function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/announcements/"
-  
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/announcements/"
+
   # Output for the Lambda Function ARN
   AnnouncementsFunctionArn:
     Description: "Announcements Lambda Function ARN"
@@ -78,3 +122,12 @@ Outputs:
   AnnouncementsFunctionIamRole:
     Description: "IAM Role created for Announcements function"
     Value: !GetAtt AnnouncementsFunctionRole.Arn
+
+  # Output for the Cognito User Pool and Client
+  CognitoUserPoolId:
+    Description: "Cognito User Pool ID"
+    Value: !Ref AnnouncementsUserPool
+
+  CognitoUserPoolClientId:
+    Description: "Cognito User Pool Client ID"
+    Value: !Ref AnnouncementsUserPoolClient
