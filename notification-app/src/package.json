@@ -7,7 +7,10 @@
   "author": "SAM CLI",
   "license": "MIT",
   "dependencies": {
-    "aws-sdk": "^2.1691.0",
+    "@aws-sdk/client-dynamodb": "^3.675.0",
+    "@aws-sdk/client-secrets-manager": "^3.675.0",
+    "@aws-sdk/client-sns": "^3.675.0",
+    "@aws-sdk/lib-dynamodb": "^3.675.0",
     "axios": ">=1.6.0",
     "jsonwebtoken": "^9.0.2"
   },
@@ -16,6 +19,7 @@
   },
   "devDependencies": {
     "chai": "^4.3.6",
-    "mocha": "^10.2.0"
+    "mocha": "^10.2.0",
+    "sinon": "^19.0.2"
   }
 }
