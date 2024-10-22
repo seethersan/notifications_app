@@ -80,7 +80,7 @@ Resources:
           Properties:
             Path: /announcements
             Method: any  # Supports GET, POST, etc.
-            RestApiId: !Ref MyApi  # Attach to the custom API Gateway
+            RestApiId: !Ref AnnouncementsAPI  # Attach to the custom API Gateway
       Policies:
         - AWSLambdaDynamoDBExecutionRole
         - AWSLambdaBasicExecutionRole
@@ -96,7 +96,7 @@ Resources:
             Resource: "*"
 
   # API Gateway with Cognito Authorizer
-  MyApi:
+  AnnouncementsAPI:
     Type: AWS::Serverless::Api
     Properties:
       StageName: Prod
@@ -111,7 +111,7 @@ Outputs:
   # Output for the API Gateway endpoint
   AnnouncementsApiUrl:
     Description: "API Gateway endpoint URL for Announcements function"
-    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/announcements/"
+    Value: !Sub "https://${AnnouncementsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/announcements/"
 
   # Output for the Lambda Function ARN
   AnnouncementsFunctionArn:
