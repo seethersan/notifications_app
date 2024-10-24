@@ -3,7 +3,15 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   notification-app
 
-  SAM Template for a notification app with DynamoDB and SNS integration
+  SAM Template for a notification app with DynamoDB, SNS, and Cognito User Pool integration
+
+Parameters:
+  CognitoUserPoolDomainName:
+    Type: String
+    Description: The domain name for the Cognito User Pool
+  FrontendURL:
+    Type: String
+    Description: The URL of the frontend (e.g., CloudFront distribution)
 
 Globals:
   Function:
@@ -56,8 +64,14 @@ Resources:
       ClientName: "NotificationsAppClient"
       GenerateSecret: false
       ExplicitAuthFlows:
-        - ALLOW_USER_SRP_AUTH  # Allow SRP auth for better security
+        - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+
+  AnnouncementsUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref AnnouncementsUserPool
+      Domain: !Ref CognitoUserPoolDomainName
 
   # Lambda function for handling API requests
   AnnouncementsFunction:
@@ -75,34 +89,57 @@ Resources:
           COGNITO_USER_POOL_ID: !Ref AnnouncementsUserPool
           AWS_COGNITO_REGION: !Ref AWS::Region
       Events:
-        AnnouncementsApi:
+        # GET method with Cognito Authorizer
+        AnnouncementsApiGet:
           Type: Api
           Properties:
             Path: /announcements
-            Method: any  # Supports GET, POST, etc.
-            RestApiId: !Ref AnnouncementsAPI  # Attach to the custom API Gateway
+            Method: get
+            RestApiId: !Ref AnnouncementsAPI
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+        # POST method with Cognito Authorizer
+        AnnouncementsApiPost:
+          Type: Api
+          Properties:
+            Path: /announcements
+            Method: post
+            RestApiId: !Ref AnnouncementsAPI
+            Auth:
+              Authorizer: CognitoAuthorizer
+
       Policies:
         - AWSLambdaDynamoDBExecutionRole
         - AWSLambdaBasicExecutionRole
         - Statement:
             Effect: Allow
             Action:
-              - "sns:Publish"
-            Resource: !Ref AnnouncementsSNSTopic
+              - "dynamodb:PutItem"
+              - "dynamodb:GetItem"
+              - "dynamodb:Scan"
+            Resource: !GetAtt AnnouncementsTable.Arn
         - Statement:
             Effect: Allow
             Action:
-              - "secretsmanager:GetSecretValue"
-            Resource: "*"
+              - "sns:Publish"
+            Resource: !Ref AnnouncementsSNSTopic
 
-  # API Gateway with Cognito Authorizer
+  # API Gateway with Cognito Authorizer and CORS Configuration
   AnnouncementsAPI:
     Type: AWS::Serverless::Api
     Properties:
       StageName: Prod
-      Cors: "'*'"  # Allow CORS from any origin
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,Access-Control-Allow-Origin'"
+        AllowOrigin: !Sub "'${FrontendURL}'"
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: ./openapi.yaml
       Auth:
-        DefaultAuthorizer: CognitoAuthorizer
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt AnnouncementsUserPool.Arn
@@ -131,3 +168,7 @@ Outputs:
   CognitoUserPoolClientId:
     Description: "Cognito User Pool Client ID"
     Value: !Ref AnnouncementsUserPoolClient
+
+  CognitoUserPoolURL:
+    Description: "URI to be used to set up external federated IDPs"
+    Value: !Sub "https://${CognitoUserPoolDomainName}.auth.${AWS::Region}.amazoncognito.com"
