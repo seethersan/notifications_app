@@ -1,0 +1,71 @@
+service: react-app
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: 'prod'
+  environment:
+    REACT_APP_COGNITO_USER_POOL_ID: ${env:REACT_APP_COGNITO_USER_POOL_ID}
+    REACT_APP_COGNITO_USER_POOL_CLIENT_ID: ${env:REACT_APP_COGNITO_USER_POOL_CLIENT_ID}
+    REACT_APP_COGNITO_DOMAIN: ${env:REACT_APP_COGNITO_DOMAIN}
+    REACT_APP_REDIRECT_SIGNIN: ${env:REACT_APP_REDIRECT_SIGNIN}
+    REACT_APP_REDIRECT_SIGNOUT: ${env:REACT_APP_REDIRECT_SIGNOUT}
+    REACT_APP_LAMBDA_URL: ${env:REACT_APP_LAMBDA_URL}
+
+functions: {} 
+
+resources:
+  Resources:
+    ReactAppBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucketName}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: !GetAtt ReactAppBucket.DomainName
+              Id: ReactAppOrigin
+              S3OriginConfig: {}
+          Enabled: true
+          DefaultRootObject: index.html
+          DefaultCacheBehavior:
+            TargetOriginId: ReactAppOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: true
+          PriceClass: PriceClass_100
+
+custom:
+  bucketName: react-app-${self:provider.region}-${self:provider.stage}
+  s3Sync:
+    - bucketName: ${self:custom.bucketName}
+      localDir: build
+      acl: public-read
+
+plugins:
+  - serverless-s3-sync
+  - serverless-dotenv-plugin

@@ -1,38 +1,108 @@
-.App {
-  text-align: center;
+/* App.css */
+body {
+  font-family: Arial, sans-serif;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
+.navbar {
   background-color: #282c34;
-  min-height: 100vh;
+  padding: 1rem;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  justify-content: space-between;
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.nav-links a {
+  color: white;
+  text-decoration: none;
+  margin-right: 15px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.nav-links a:hover {
+  text-decoration: underline;
+}
+
+button {
+  background-color: #61dafb;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #21a1f1;
+}
+
+.announcements, .home {
+  padding: 20px;
+}
+
+.announcements ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.announcements li {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  padding: 15px;
+  margin-bottom: 10px;
+}
+
+.announcements h3 {
+  margin: 0 0 10px;
+}
+
+.announcements p {
+  margin: 5px 0;
+}
+
+.new-feature-form {
+  margin-top: 30px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  background-color: #f9f9f9;
+}
+
+.new-feature-form h3 {
+  margin-bottom: 20px;
+}
+
+.feature-input {
+  margin-bottom: 20px;
+}
+
+.feature-input label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.feature-input input, .feature-input textarea {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.feature-input button {
+  padding: 8px 12px;
+  background-color: #ff6b6b;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.feature-input button:hover {
+  background-color: #ff5252;
+}
+
+.new-feature-form button {
+  padding: 10px 20px;
+  background-color: #61dafb;
+  border: none;
+  cursor: pointer;
+}
+
+.new-feature-form button:hover {
+  background-color: #21a1f1;
 }
