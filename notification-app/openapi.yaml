@@ -116,11 +116,11 @@ paths:
         type: aws_proxy
 
     post:
-      summary: Create a new announcement
-      operationId: createAnnouncement
+      summary: Create new announcements
+      operationId: createAnnouncements
       tags:
         - Announcements
-      description: Add a new announcement to the system.
+      description: Add multiple new announcements to the system.
       requestBody:
         required: true
         content:
@@ -128,19 +128,26 @@ paths:
             schema:
               type: object
               required:
-                - title
-                - description
-                - releaseDate
+                - features
               properties:
-                title:
-                  type: string
-                description:
-                  type: string
-                releaseDate:
-                  type: string
+                features:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - title
+                      - description
+                      - releaseDate
+                    properties:
+                      title:
+                        type: string
+                      description:
+                        type: string
+                      releaseDate:
+                        type: string
       responses:
         '201':
-          description: Successfully created announcement
+          description: Successfully created announcements
           content:
             application/json:
               schema:
@@ -148,17 +155,19 @@ paths:
                 properties:
                   message:
                     type: string
-                  announcement:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                      title:
-                        type: string
-                      description:
-                        type: string
-                      releaseDate:
-                        type: string
+                  announcements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        releaseDate:
+                          type: string
         '400':
           $ref: '#/components/responses/badRequest'
         '401':
